@@ -1,8 +1,10 @@
 ## imports and device
 
 import random
+from datetime import datetime
 import torch
 import torch.utils.data
+from torch.utils.tensorboard.writer import SummaryWriter
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
@@ -10,13 +12,14 @@ import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+writer = SummaryWriter(f"./multiclass_img/runs/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
 
 ##
 ## hyperparameters and other definitions
 
-lr = 3e-4
-epochs = 8
-batch_size=100
+lr = 1e-4
+epochs = 15
+batch_size=200
 
 classnames = {
     0: 'TShirt',
@@ -54,18 +57,18 @@ print(ex_label)
 class FashionModel(nn.Module):
     def __init__(self):
         super(FashionModel, self).__init__()
-        self.conv = nn.Conv2d(1, 3, 5)
+        self.conv1 = nn.Conv2d(1, 2, 3)
         self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.Linear(3 * 12 * 12, 100)
-        self.fc2 = nn.Linear(100, 50)
-        self.fc3 = nn.Linear(50, 10)
+        self.conv2 = nn.Conv2d(2, 6, 3)
+        self.fc1 = nn.Linear(6 * 5 * 5, 64)
+        self.fc2 = nn.Linear(64, 10)
 
     def forward(self, x):
-        x = self.pool(F.relu(self.conv(x))) # -> n, 3, 12, 12
-        x = x.view(-1, 3 * 12 * 12) # -> n, 3 * 12 * 12
-        x = F.relu(self.fc1(x)) # -> n, 100
-        x = F.relu(self.fc2(x)) # -> n, 50
-        x = self.fc3(x) # -> n, 10
+        x = self.pool(F.relu(self.conv1(x))) # -> n, 2, 13, 13
+        x = self.pool(F.relu(self.conv2(x))) # -> n, 6, 5, 5
+        x = x.view(-1, 6 * 5* 5) # -> n, 6 * 5 * 5
+        x = F.relu(self.fc1(x)) # -> n, 64 
+        x = self.fc2(x) # -> n, 10
         return x
 
 model = FashionModel().to(device)
@@ -80,6 +83,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 ## train and safe
 
 path_model = './multiclass_img/model/fashion.pth'
+running_loss = 0
 
 train = False
 if train:
@@ -98,10 +102,13 @@ if train:
             optimizer.zero_grad() # grads of parameters will accumulate for the passes
             loss.backward() # computes grads of all tensors with requires_grad=True (set for parameters by model)
             optimizer.step() # adjusts the parameters according to their grads
+            running_loss += loss.item()
 
             # logging
-            if (i+1) % 100 == 0:
+            if (i+1) % 50 == 0:
                 print(f"epoch {epoch+1}/{epochs}, batch {i+1}/{batches}, loss {loss.item():.5f}")
+                writer.add_scalar('running loss', running_loss / 50, epoch * len(loader_train) + i)
+                running_loss = 0
 
     torch.save(model.state_dict(), path_model)
 
@@ -137,14 +144,18 @@ accuracy = (total_corr / total_samples) * 100.0
 print(f"accuracy: {accuracy}")
 
 ##
-## plot some predictions
+## send some predictions to tensorboard
 imgs, lbls = iter(loader_val).next()
-fig, axs = plt.subplots(3, 3)
+out = model(imgs.to(device))
+fig = plt.figure()
+_, axs = plt.subplots(3, 3)
 for i in range(9):
     index = random.randrange(0, imgs.shape[0])
-    plot_label = classnames[lbls[index].item()]
+    _, out_scalar = torch.max(out[index], 0)
+    plot_label = f"{classnames[lbls[index].item()]}: {classnames[out_scalar.item()]}"
     axs.flat[i].imshow(imgs[index, 0], cmap='gray')
     axs.flat[i].set_title(plot_label)
-plt.show()
+writer.add_figure('some predictions', plt.gcf())
+# plt.show()
 
 ##
