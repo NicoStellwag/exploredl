@@ -4,6 +4,15 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+pynvim = "*"
+jupyter-client = "*"
+ueberzug = "*"
+pillow = "*"
+cairosvg = "*"
+pnglatex = "*"
+plotly = "*"
+kaleido = "*"
+tensorboard = "*"
 
 [dev-packages]
 ipykernel = "*"
