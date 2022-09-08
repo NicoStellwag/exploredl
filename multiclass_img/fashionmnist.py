@@ -2,6 +2,8 @@
 
 import random
 from datetime import datetime
+import glob
+import os
 import torch
 import torch.utils.data
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -11,15 +13,18 @@ import torchvision
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 
+timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-writer = SummaryWriter(f"./multiclass_img/runs/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
+writer = SummaryWriter(f"./multiclass_img/runs/{timestamp}")
+
+train = False
 
 ##
 ## hyperparameters and other definitions
 
-lr = 1e-4
-epochs = 15
-batch_size=200
+lr = 5e-3
+epochs = 10
+batch_size=100
 
 classnames = {
     0: 'TShirt',
@@ -57,17 +62,17 @@ print(ex_label)
 class FashionModel(nn.Module):
     def __init__(self):
         super(FashionModel, self).__init__()
-        self.conv1 = nn.Conv2d(1, 2, 3)
+        self.conv1 = nn.Conv2d(1, 5, 5)
         self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(2, 6, 3)
-        self.fc1 = nn.Linear(6 * 5 * 5, 64)
-        self.fc2 = nn.Linear(64, 10)
+        self.conv2 = nn.Conv2d(5, 10, 5)
+        self.fc1 = nn.Linear(10 * 4 * 4, 80)
+        self.fc2 = nn.Linear(80, 10)
 
     def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x))) # -> n, 2, 13, 13
-        x = self.pool(F.relu(self.conv2(x))) # -> n, 6, 5, 5
-        x = x.view(-1, 6 * 5* 5) # -> n, 6 * 5 * 5
-        x = F.relu(self.fc1(x)) # -> n, 64 
+        x = self.pool(F.relu(self.conv1(x))) # -> n, 5, 12, 12
+        x = self.pool(F.relu(self.conv2(x))) # -> n, 10, 4, 4
+        x = x.view(-1, 10 * 4* 4) # -> n, 10 * 4 * 4
+        x = F.relu(self.fc1(x)) # -> n, 80
         x = self.fc2(x) # -> n, 10
         return x
 
@@ -82,10 +87,9 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 ##
 ## train and safe
 
-path_model = './multiclass_img/model/fashion.pth'
+path_model = f'./multiclass_img/model/fashion_{timestamp}.pth'
 running_loss = 0
 
-train = False
 if train:
     batches = len(loader_train)
     for epoch in range(epochs):
@@ -105,9 +109,9 @@ if train:
             running_loss += loss.item()
 
             # logging
-            if (i+1) % 50 == 0:
+            if (i+1) % 100 == 0:
                 print(f"epoch {epoch+1}/{epochs}, batch {i+1}/{batches}, loss {loss.item():.5f}")
-                writer.add_scalar('running loss', running_loss / 50, epoch * len(loader_train) + i)
+                writer.add_scalar('running loss', running_loss / 100, epoch * len(loader_train) + i)
                 running_loss = 0
 
     torch.save(model.state_dict(), path_model)
@@ -115,8 +119,11 @@ if train:
 ##
 ## evaluate
 
-model = FashionModel()
-model.load_state_dict(torch.load(path_model)) # the correct device should be saved with the model, otherwise load gets the map_location argument
+if not train:
+    saved_models = glob.glob('./multiclass_img/model/*')
+    latest_model = max(saved_models, key=os.path.getctime)
+    model = FashionModel()
+    model.load_state_dict(torch.load(latest_model)) # the correct device should be saved with the model, otherwise load gets the map_location argument
 model.eval()
 with torch.no_grad():
     total_corr = 0
