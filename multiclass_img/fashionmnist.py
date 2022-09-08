@@ -63,16 +63,25 @@ class FashionModel(nn.Module):
     def __init__(self):
         super(FashionModel, self).__init__()
         self.conv1 = nn.Conv2d(1, 5, 5)
+        self.bn1 = nn.BatchNorm2d(5)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(5, 10, 5)
+        self.bn2 = nn.BatchNorm2d(10)
         self.fc1 = nn.Linear(10 * 4 * 4, 80)
+        self.bn3 = nn.BatchNorm1d(80)
         self.fc2 = nn.Linear(80, 10)
 
     def forward(self, x):
+        # conv
         x = self.pool(F.relu(self.conv1(x))) # -> n, 5, 12, 12
+        x = self.bn1(x)
         x = self.pool(F.relu(self.conv2(x))) # -> n, 10, 4, 4
+        x = self.bn2(x)
+        # flatten
         x = x.view(-1, 10 * 4* 4) # -> n, 10 * 4 * 4
+        # lin
         x = F.relu(self.fc1(x)) # -> n, 80
+        x = self.bn3(x)
         x = self.fc2(x) # -> n, 10
         return x
 
