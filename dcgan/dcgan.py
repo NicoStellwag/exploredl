@@ -149,6 +149,9 @@ optimizer_gen = torch.optim.Adam(gen.parameters(), lr=lr, betas=(beta1_adam, 0.9
 ##
 ## training loop
 
+path_dis = f'./dcgan/model/dis_{timestamp}.pth'
+path_gen = f'./dcgan/model/gen{timestamp}.pth'
+
 z_fixed = torch.randn((9, nz, 1, 1), device=device) # fixed noise to track the gen's progress
 batches = len(dataloader)
 running_loss_dis = 0
@@ -208,4 +211,8 @@ for epoch in range(epochs):
                 plt.imshow(vutils.make_grid(fakes, padding=2, normalize=True, nrow=3).permute(1, 2, 0))
                 writer.add_figure('fixed noise gen results', plt.gcf())
                 plt.clf()
+
+torch.save(dis.state_dict(), path_dis)
+torch.save(gen.state_dict(), path_gen)
+
 ##
