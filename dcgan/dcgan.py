@@ -216,8 +216,8 @@ if train:
                     writer.add_figure('fixed noise gen results', plt.gcf())
                     plt.clf()
 
-torch.save(dis.state_dict(), path_dis)
-torch.save(gen.state_dict(), path_gen)
+    torch.save(dis.state_dict(), path_dis)
+    torch.save(gen.state_dict(), path_gen)
 
 ##
 ## validate
