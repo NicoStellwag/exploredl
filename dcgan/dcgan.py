@@ -4,15 +4,19 @@ import torch
 import torch.nn as nn
 import torch.nn.parallel
 import torch.utils.data
+from torch.utils.tensorboard.writer import SummaryWriter
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 ##
 ## global objects
 
+timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+writer = SummaryWriter(f"./dcgan/runs/{timestamp}")
 
 ##
 ## global params
@@ -24,9 +28,10 @@ batch_size = 128
 sigma_init = 0.02 # init all weights with zero centered normal distribution
 slope_lrelu = 0.2 # slope of leaky relu in all models
 lr = 2e-4
-beta_adam = 0.5
+beta1_adam = 0.5
 nz = 100 # size of the noise vector
 image_size = 64
+epochs = 5
 
 ##
 ## data
@@ -40,13 +45,12 @@ dataset = dset.ImageFolder('./dcgan/data',
             ]))
 dataloader = torch.utils.data.DataLoader(dataset, batch_size, True, num_workers=workers)
 
-example_batch = next(iter(dataloader))
-plt.figure(figsize=(3, 3))
-plt.axis('off')
-plt.title('train images')
-plt.imshow(vutils.make_grid(example_batch[0].to(device)[:9], padding=2, normalize=True, nrow=3).permute(1, 2, 0))
-plt.show()
-
+# example_batch = next(iter(dataloader))
+# plt.figure(figsize=(3, 3))
+# plt.axis('off')
+# plt.title('train images')
+# plt.imshow(vutils.make_grid(example_batch[0].to(device)[:9], padding=2, normalize=True, nrow=3).permute(1, 2, 0))
+# plt.show()
 
 ##
 ## models
@@ -58,34 +62,6 @@ def init_weights(m):
     elif layername.find("BatchNorm") >= 0:
         nn.init.normal_(m.weight.data, 1.0, sigma_init)
         nn.init.constant_(m.bias.data, 0.0)
-
-class Generator(nn.Module):
-    def __init__(self):
-        super(Generator, self).__init__()
-        self.main = nn.Sequential(
-                nn.ConvTranspose2d(nz, 1024, 4, 1, 0, bias=False),
-                nn.BatchNorm2d(1024),
-                nn.ReLU(True),
-                # -> n, 1024, 4, 4
-                nn.ConvTranspose2d(1024, 512, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(512),
-                nn.ReLU(True),
-                # -> n, 512, 8, 8
-                nn.ConvTranspose2d(512, 256, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(512),
-                nn.ReLU(True),
-                # -> n, 256, 16, 16
-                nn.ConvTranspose2d(256, 128, 4, 2, 1, bias=False),
-                nn.BatchNorm2d(128),
-                nn.ReLU(True),
-                # -> n, 128, 32, 32
-                nn.ConvTranspose2d(128, 3, 4, 2, 1, bias=False),
-                nn.Tanh(),
-                # -> n, 3, 64, 64
-                )
-
-    def forward(self, x):
-        return self.main(x)
 
 class Discriminator(nn.Module):
     def __init__(self):
@@ -115,13 +91,121 @@ class Discriminator(nn.Module):
     def forward(self, input):
         return self.main(input)
 
-gen = Generator().to(device)
+class Generator(nn.Module):
+    def __init__(self):
+        super(Generator, self).__init__()
+        self.main = nn.Sequential(
+                nn.ConvTranspose2d(nz, 1024, 4, 1, 0, bias=False),
+                nn.BatchNorm2d(1024),
+                nn.ReLU(True),
+                # -> n, 1024, 4, 4
+                nn.ConvTranspose2d(1024, 512, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(512),
+                nn.ReLU(True),
+                # -> n, 512, 8, 8
+                nn.ConvTranspose2d(512, 256, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(256),
+                nn.ReLU(True),
+                # -> n, 256, 16, 16
+                nn.ConvTranspose2d(256, 128, 4, 2, 1, bias=False),
+                nn.BatchNorm2d(128),
+                nn.ReLU(True),
+                # -> n, 128, 32, 32
+                nn.ConvTranspose2d(128, 3, 4, 2, 1, bias=False),
+                nn.Tanh(),
+                # -> n, 3, 64, 64
+                )
+
+    def forward(self, x):
+        return self.main(x)
+
 dis = Discriminator().to(device)
+gen = Generator().to(device)
 if device.type == 'cuda' and num_gpu > 1:
-    gen = nn.parallel.DataParallel(gen, list(range(num_gpu)))
     dis = nn.parallel.DataParallel(dis, list(range(num_gpu)))
-gen.apply(init_weights)
+    gen = nn.parallel.DataParallel(gen, list(range(num_gpu)))
 dis.apply(init_weights)
+gen.apply(init_weights)
 
 ##
-# continue: https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html#loss-functions-and-optimizers
+## loss and optimizer
+
+# discriminator:
+#       max log(D(x)) + log(1 - D(G(x)))
+# <=>   min -log(D(x)) + -log(1-D(G(x)))
+# =>    D(x) should be 1 and D(G(x)) should be 0
+y_dis_real = torch.ones((batch_size, 1), dtype=torch.float, device=device)
+y_dis_fake = torch.zeros((batch_size, 1), dtype=torch.float, device=device)
+# generator:
+#       max log(D(G(x)))
+# <=>   min -log(D(G(x)))
+# =>    D(G(x)) should be 1
+y_gen_fake = y_dis_real
+
+criterion = nn.BCELoss()
+optimizer_dis = torch.optim.Adam(dis.parameters(), lr=lr, betas=(beta1_adam, 0.999))
+optimizer_gen = torch.optim.Adam(gen.parameters(), lr=lr, betas=(beta1_adam, 0.999))
+
+##
+## training loop
+
+z_fixed = torch.randn((9, nz, 1, 1), device=device) # fixed noise to track the gen's progress
+batches = len(dataloader)
+running_loss_dis = 0
+running_loss_gen = 0
+
+for epoch in range(epochs):
+    for i, (images_real, _) in enumerate(dataloader):
+        # real data prep
+        X_real = images_real.to(device)
+
+        # fake data prep
+        z = torch.randn((batch_size, nz, 1, 1), device=device)
+        X_fake = gen(z)
+
+        # discriminator forward real
+        out = dis(X_real).view(-1, 1)
+        loss_dis_real = criterion(out, y_dis_real)
+
+        # discriminator backward real
+        optimizer_dis.zero_grad()
+        loss_dis_real.backward()
+
+        # discriminator forward fake
+        out = dis(X_fake.detach()).view(-1, 1) # detach the fakes because we will recalc later
+        loss_dis_fake = criterion(out, y_dis_fake)
+
+        # discriminator backward fake
+        loss_dis_fake.backward()
+        optimizer_dis.step()
+        loss_dis = loss_dis_real + loss_dis_fake # only relevant for tracking progress
+
+        # generator forward
+        out = dis(X_fake).view(-1, 1) # recalculate to optimize against the updated discriminator
+        loss_gen = criterion(out, y_gen_fake)
+
+        # generator backward
+        optimizer_gen.zero_grad()
+        loss_gen.backward()
+        optimizer_gen.step()
+
+        # logging
+        running_loss_dis += loss_dis
+        running_loss_gen += loss_gen
+        if (i + 1) % 50 == 0:
+            print(f"epoch {epoch+1}/{epochs} - batch {i+1}/{batches} - dis loss {loss_dis:.5f} - gen loss {loss_gen:.5f}")
+            writer.add_scalar('running loss Discriminator', running_loss_dis / 50, epoch * batches + i)
+            writer.add_scalar('running loss Generator', running_loss_gen / 50, epoch * batches + i)
+            running_loss_dis, running_loss_gen = 0, 0
+
+        # track gen's progress using fixed noise
+        if (i % 500 == 0) or ((epoch == epochs - 1) and (i == batches - 1)):
+            with torch.no_grad():
+                fakes = gen(z_fixed).detach().cpu()
+                plt.figure(figsize=(3, 3))
+                plt.axis('off')
+                plt.title('Fixed noise images')
+                plt.imshow(vutils.make_grid(fakes, padding=2, normalize=True, nrow=3).permute(1, 2, 0))
+                writer.add_figure('fixed noise gen results', plt.gcf())
+                plt.clf()
+##
