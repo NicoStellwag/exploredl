@@ -163,6 +163,9 @@ running_loss_gen = 0
 if train:
     for epoch in range(epochs):
         for i, (images_real, _) in enumerate(dataloader):
+            # TODO make sure the label vectors are of same size as the output vectors for the last batch of the epoch
+            # TODO why the hell is the dis loss 0 after 1 or 2 epochs
+
             # real data prep
             X_real = images_real.to(device)
 
