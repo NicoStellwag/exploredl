@@ -1,4 +1,4 @@
-## imports and device
+# %% imports and device
 
 import random
 from datetime import datetime
@@ -19,8 +19,7 @@ writer = SummaryWriter(f"./multiclass_img/runs/{timestamp}")
 
 train = False
 
-##
-## hyperparameters and other definitions
+# %% hyperparameters and other definitions
 
 lr = 5e-3
 epochs = 10
@@ -39,8 +38,7 @@ classnames = {
     9: 'AnkleBoot',
 }
 
-##
-## data
+# %% data
 
 data_train  = torchvision.datasets.FashionMNIST('./multiclass_img/data/train', True, download=True, transform=transforms.ToTensor())
 data_val = torchvision.datasets.FashionMNIST('./multiclass_img/data/val', False, download=True, transform=transforms.ToTensor())
@@ -53,11 +51,10 @@ examples = iter(loader_val)
 ex_img, ex_label = examples.next()
 print(ex_img.shape, ex_label.shape)
 print(ex_label)
-# plt.imshow(ex_img[0, 0], cmap='gray')
+plt.imshow(ex_img[0, 0], cmap='gray')
 # plt.show()
 
-##
-## model
+# %% model
 
 class FashionModel(nn.Module):
     def __init__(self):
@@ -87,14 +84,12 @@ class FashionModel(nn.Module):
 
 model = FashionModel().to(device)
 
-##
-## loss and optimizer
+# %% loss and optimizer
 
 criterion = nn.CrossEntropyLoss() # expects unnormalized input, hence no activation function in output layer
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-##
-## train and safe
+# %% train and safe
 
 path_model = f'./multiclass_img/model/fashion_{timestamp}.pth'
 running_loss = 0
@@ -125,8 +120,7 @@ if train:
 
     torch.save(model.state_dict(), path_model)
 
-##
-## evaluate
+# %% evaluate
 
 if not train:
     saved_models = glob.glob('./multiclass_img/model/*')
@@ -159,8 +153,8 @@ with torch.no_grad():
 accuracy = (total_corr / total_samples) * 100.0
 print(f"accuracy: {accuracy}")
 
-##
-## send some predictions to tensorboard
+# %% send some predictions to tensorboard
+
 imgs, lbls = iter(loader_val).next()
 out = model(imgs.to(device))
 fig = plt.figure()
@@ -173,5 +167,3 @@ for i in range(9):
     axs.flat[i].set_title(plot_label)
 writer.add_figure('some predictions', plt.gcf())
 # plt.show()
-
-##
