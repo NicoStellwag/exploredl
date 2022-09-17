@@ -1,4 +1,4 @@
-## imports
+# %% imports
 
 import torch
 import torch.nn as nn
@@ -13,15 +13,13 @@ from datetime import datetime
 import os
 import glob
 
-##
-## global objects
+# %% global objects
 
 timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 writer = SummaryWriter(f"./dcgan/runs/{timestamp}")
 
-##
-## global params
+# %% global params
 
 train = True
 workers = 2 # data preprocessing uses 2 subprocesses
@@ -36,8 +34,7 @@ nz = 100 # size of the noise vector
 image_size = 64
 epochs = 5
 
-##
-## data
+# %% data
 
 dataset = dset.ImageFolder('./dcgan/data',
     transform=transforms.Compose([
@@ -55,8 +52,7 @@ dataloader = torch.utils.data.DataLoader(dataset, batch_size, True, num_workers=
 # plt.imshow(vutils.make_grid(example_batch[0].to(device)[:9], padding=2, normalize=True, nrow=3).permute(1, 2, 0))
 # plt.show()
 
-##
-## models
+# %% models
 
 def init_weights(m):
     layername = type(m).__name__
@@ -130,8 +126,7 @@ if device.type == 'cuda' and num_gpu > 1:
 dis.apply(init_weights)
 gen.apply(init_weights)
 
-##
-## loss and optimizer
+# %% loss and optimizer
 
 # discriminator:
 #       max log(D(x)) + log(1 - D(G(x)))
@@ -149,8 +144,7 @@ criterion = nn.BCELoss()
 optimizer_dis = torch.optim.Adam(dis.parameters(), lr=lr, betas=(beta1_adam, 0.999))
 optimizer_gen = torch.optim.Adam(gen.parameters(), lr=lr, betas=(beta1_adam, 0.999))
 
-##
-## training loop
+# %% training loop
 
 path_dis = f'./dcgan/model/dis_{timestamp}.pth'
 path_gen = f'./dcgan/model/gen{timestamp}.pth'
@@ -222,8 +216,7 @@ if train:
     torch.save(dis.state_dict(), path_dis)
     torch.save(gen.state_dict(), path_gen)
 
-##
-## validate
+# %% validate
 
 if not train:
     saved_dis_models = glob.glob('./dcgan/model/dis*.pth')
@@ -244,5 +237,3 @@ if not train:
         plt.imshow(vutils.make_grid(fakes, padding=2, normalize=True, nrow=3).permute(1, 2, 0))
         writer.add_figure('fixed noise gen results', plt.gcf())
         plt.clf()
-
-##
