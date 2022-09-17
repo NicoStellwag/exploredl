@@ -67,22 +67,22 @@ class Discriminator(nn.Module):
         super(Discriminator, self).__init__()
         self.main = nn.Sequential(
             # n, 3, 64, 64
-            nn.Conv2d(3, 128, 4, 2, 1, bias=False),
+            nn.Conv2d(3, 64, 4, 2, 1, bias=False),
             nn.LeakyReLU(slope_lrelu, inplace=True),
-            # -> n, 128, 32, 32
+            # -> n, 64, 32, 32
+            nn.Conv2d(64, 128, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(slope_lrelu, inplace=True),
+            # -> n, 128, 16, 16
             nn.Conv2d(128, 256, 4, 2, 1, bias=False),
             nn.BatchNorm2d(256),
             nn.LeakyReLU(slope_lrelu, inplace=True),
-            # -> n, 256, 16, 16
+            # -> n, 256, 8, 8
             nn.Conv2d(256, 512, 4, 2, 1, bias=False),
             nn.BatchNorm2d(512),
             nn.LeakyReLU(slope_lrelu, inplace=True),
-            # -> n, 512, 8, 8
-            nn.Conv2d(512, 1024, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(1024),
-            nn.LeakyReLU(slope_lrelu, inplace=True),
-            # -> n, 1024, 4, 4
-            nn.Conv2d(1024, 1, 4, 1, 0, bias=False),
+            # -> n, 512, 4, 4
+            nn.Conv2d(512, 1, 4, 1, 0, bias=False),
             nn.Sigmoid()
             # -> n, 1
             )
@@ -94,23 +94,23 @@ class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
         self.main = nn.Sequential(
-            nn.ConvTranspose2d(nz, 1024, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(1024),
-            nn.ReLU(True),
-            # -> n, 1024, 4, 4
-            nn.ConvTranspose2d(1024, 512, 4, 2, 1, bias=False),
+            nn.ConvTranspose2d(nz, 512, 4, 1, 0, bias=False),
             nn.BatchNorm2d(512),
             nn.ReLU(True),
-            # -> n, 512, 8, 8
+            # -> n, 512, 4, 4
             nn.ConvTranspose2d(512, 256, 4, 2, 1, bias=False),
             nn.BatchNorm2d(256),
             nn.ReLU(True),
-            # -> n, 256, 16, 16
+            # -> n, 256, 8, 8
             nn.ConvTranspose2d(256, 128, 4, 2, 1, bias=False),
             nn.BatchNorm2d(128),
             nn.ReLU(True),
-            # -> n, 128, 32, 32
-            nn.ConvTranspose2d(128, 3, 4, 2, 1, bias=False),
+            # -> n, 128, 16, 16
+            nn.ConvTranspose2d(128, 64, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(True),
+            # -> n, 64, 32, 32
+            nn.ConvTranspose2d(64, 3, 4, 2, 1, bias=False),
             nn.Tanh(),
             # -> n, 3, 64, 64
             )
