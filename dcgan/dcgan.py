@@ -22,8 +22,8 @@ writer = SummaryWriter(f"./dcgan/runs/{timestamp}")
 # %% global params
 
 train = True
-workers = 2 # data preprocessing uses 2 subprocesses
-num_gpu = 0
+workers = 1 # data preprocessing uses 2 subprocesses
+num_gpu = 1
 
 batch_size = 128
 sigma_init = 0.02 # init all weights with zero centered normal distribution
@@ -132,13 +132,13 @@ gen.apply(init_weights)
 #       max log(D(x)) + log(1 - D(G(x)))
 # <=>   min -log(D(x)) + -log(1-D(G(x)))
 # =>    D(x) should be 1 and D(G(x)) should be 0
-y_dis_real = torch.ones((batch_size, 1), dtype=torch.float, device=device)
-y_dis_fake = torch.zeros((batch_size, 1), dtype=torch.float, device=device)
+y_dis_real = 1
+y_dis_fake = 0
 # generator:
 #       max log(D(G(x)))
 # <=>   min -log(D(G(x)))
 # =>    D(G(x)) should be 1
-y_gen_fake = y_dis_real
+y_gen_fake = 1
 
 criterion = nn.BCELoss()
 optimizer_dis = torch.optim.Adam(dis.parameters(), lr=lr, betas=(beta1_adam, 0.999))
@@ -157,19 +157,19 @@ running_loss_gen = 0
 if train:
     for epoch in range(epochs):
         for i, (images_real, _) in enumerate(dataloader):
-            # TODO make sure the label vectors are of same size as the output vectors for the last batch of the epoch
-            # TODO why the hell is the dis loss 0 after 1 or 2 epochs
+            current_batch_size = images_real.shape[0]
 
             # real data prep
             X_real = images_real.to(device)
 
             # fake data prep
-            z = torch.randn((batch_size, nz, 1, 1), device=device)
+            z = torch.randn((current_batch_size, nz, 1, 1), device=device)
             X_fake = gen(z)
 
             # discriminator forward real
             out = dis(X_real).view(-1, 1)
-            loss_dis_real = criterion(out, y_dis_real)
+            labels = torch.full((current_batch_size, 1), y_dis_real, dtype=torch.float, device=device)
+            loss_dis_real = criterion(out, labels)
 
             # discriminator backward real
             optimizer_dis.zero_grad()
@@ -177,7 +177,8 @@ if train:
 
             # discriminator forward fake
             out = dis(X_fake.detach()).view(-1, 1) # detach the fakes because we will recalc later
-            loss_dis_fake = criterion(out, y_dis_fake)
+            labels.fill_(y_dis_fake)
+            loss_dis_fake = criterion(out, labels)
 
             # discriminator backward fake
             loss_dis_fake.backward()
@@ -186,7 +187,8 @@ if train:
 
             # generator forward
             out = dis(X_fake).view(-1, 1) # recalculate to optimize against the updated discriminator
-            loss_gen = criterion(out, y_gen_fake)
+            labels.fill_(y_gen_fake)
+            loss_gen = criterion(out, labels)
 
             # generator backward
             optimizer_gen.zero_grad()
